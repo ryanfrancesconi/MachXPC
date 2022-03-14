@@ -100,15 +100,15 @@ xpc_endpoint_t (*_xpc_endpoint_create)(mach_port_t);
 	}
 
 	dispatch_source_cancel(_dispatchSrc);
-    NSLog(@"MachXPC: mach_port_deallocate");
+	NSLog(@"MachXPC: mach_port_deallocate");
 	mach_port_deallocate(mach_task_self(), _server_port);
-    
-    NSLog(@"MachXPC: mach_port_destroy");
-    mach_port_destroy(mach_task_self(), _server_port);
+
+	NSLog(@"MachXPC: mach_port_destroy");
+	mach_port_destroy(mach_task_self(), _server_port);
 }
 
 - (void)dealloc {
-    [self destroy];
+	[self destroy];
 }
 
 + (void)load {
