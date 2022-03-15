@@ -42,17 +42,23 @@ xpc_endpoint_t (*_xpc_endpoint_create)(mach_port_t);
 
 - (instancetype)initWithName:(NSString *)name connectionHandler:(void (^)(NSString *serviceIdentifier, NSXPCListenerEndpoint *listener))handler {
 	self = [super init];
+
+	kern_return_t kr = bootstrap_check_in(bootstrap_port, name.UTF8String, &_server_port);
+	if (kr != KERN_SUCCESS) {
+
+		NSString *error = [NSString stringWithUTF8String: bootstrap_strerror(kr)];
+		NSLog(@"MachXPCHost: bootstrap_check_in error: %d, %@", kr, error);
+
+		return NULL;
+	}
+
 	_name = name;
 	_handler = handler;
 	_listenerQueue = dispatch_queue_create([[NSString stringWithFormat:@"%@/machXPC_host_q", name] UTF8String],
 	                                       DISPATCH_QUEUE_SERIAL);
 
-	kern_return_t kr = bootstrap_check_in(bootstrap_port, name.UTF8String, &_server_port);
-	if(kr != KERN_SUCCESS) {
-		return NULL;
-	}
-
 	_dispatchSrc = dispatch_source_create(DISPATCH_SOURCE_TYPE_MACH_RECV, _server_port, 0, _listenerQueue);
+
 	dispatch_source_set_event_handler(_dispatchSrc, ^{
 		msg_format_response_r_t recv_msg;
 		mach_msg_header_t *recv_hdr;
@@ -94,27 +100,16 @@ xpc_endpoint_t (*_xpc_endpoint_create)(mach_port_t);
 	dispatch_resume(_dispatchSrc);
 }
 
-- (void)cancel {
-	if (dispatch_source_testcancel(_dispatchSrc) != 0) {
+- (void)dealloc {
+	// Verify that the connection was opened, otherwise it will crash
+	// on dispatch_source_cancel, mach_port_deallocate
+	if (_server_port == -1 || _server_port == 0) {
+		NSLog(@"MachXPCHost: Invalid server port: %d", _server_port);
 		return;
 	}
 
-	NSLog(@"MachXPC.cancel");
 	dispatch_source_cancel(_dispatchSrc);
-}
-
-- (void)destroy {
-	[self cancel];
-
-	NSLog(@"MachXPC.destroy: mach_port_deallocate");
 	mach_port_deallocate(mach_task_self(), _server_port);
-
-	NSLog(@"MachXPC.destroy: mach_port_destroy");
-	mach_port_destroy(mach_task_self(), _server_port);
-}
-
-- (void)dealloc {
-	[self destroy];
 }
 
 + (void)load {
@@ -127,4 +122,5 @@ xpc_endpoint_t (*_xpc_endpoint_create)(mach_port_t);
 #endif
 	free(sr_xpc);
 }
+
 @end
