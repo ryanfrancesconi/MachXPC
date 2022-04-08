@@ -20,6 +20,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)resume;
 
+- (void)dispose;
+
 @end
 
 NS_ASSUME_NONNULL_END

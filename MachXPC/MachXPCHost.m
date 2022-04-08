@@ -46,8 +46,11 @@ xpc_endpoint_t (*_xpc_endpoint_create)(mach_port_t);
 	kern_return_t kr = bootstrap_check_in(bootstrap_port, name.UTF8String, &_server_port);
 	if (kr != KERN_SUCCESS) {
 
+		// MachXPCHost: bootstrap_check_in error: 1103, Service is already active
+		// BOOTSTRAP_SERVICE_ACTIVE
+
 		NSString *error = [NSString stringWithUTF8String: bootstrap_strerror(kr)];
-		NSLog(@"MachXPCHost: bootstrap_check_in error: %d, %@", kr, error);
+		NSLog(@"MachXPCHost: bootstrap_check_in error: %d, %@ _server_port: %d", kr, error, _server_port);
 
 		return NULL;
 	}
@@ -77,7 +80,7 @@ xpc_endpoint_t (*_xpc_endpoint_create)(mach_port_t);
 		                            MACH_PORT_NULL);
 
 		if(kr != KERN_SUCCESS) {
-			NSLog(@"MachXPC: Host could not receive service port");
+			NSLog(@"MachXPCHost: Host could not receive service port");
 			return;
 		}
 
@@ -101,6 +104,14 @@ xpc_endpoint_t (*_xpc_endpoint_create)(mach_port_t);
 }
 
 - (void)dealloc {
+	NSLog(@"MachXPCHost: dealloc");
+
+	[self dispose];
+}
+
+- (void)dispose {
+	NSLog(@"MachXPCHost: dispose");
+
 	// Verify that the connection was opened, otherwise it will crash
 	// on dispatch_source_cancel, mach_port_deallocate
 	if (_server_port == -1 || _server_port == 0) {
@@ -109,7 +120,18 @@ xpc_endpoint_t (*_xpc_endpoint_create)(mach_port_t);
 	}
 
 	dispatch_source_cancel(_dispatchSrc);
-	mach_port_deallocate(mach_task_self(), _server_port);
+	//kern_return_t kr = mach_port_deallocate(mach_task_self(), _server_port);
+
+	kern_return_t kr = mach_port_destroy(mach_task_self(), _server_port);
+
+	// KERN_INVALID_RIGHT
+	// KERN_INVALID_RIGHT if name denoted an invalid right.
+	if (kr != KERN_SUCCESS) {
+		// MachXPCHost: mach_port_deallocate error: 17, (os/kern) invalid right _server_port: 46343
+
+		NSString *error = [NSString stringWithUTF8String: bootstrap_strerror(kr)];
+		NSLog(@"MachXPCHost: mach_port_destroy error: %d, %@ _server_port: %d", kr, error, _server_port);
+	}
 }
 
 + (void)load {
